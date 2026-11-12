@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using Alba;
+using Microsoft.AspNetCore.Hosting;
 using JasperFx.CommandLine;
 using Testcontainers.PostgreSql;
 using Xunit;
@@ -34,6 +35,9 @@ public class ApiFixture : IAsyncLifetime
 
     public IAlbaHost Host { get; private set; } = null!;
 
+    /// <summary>Direct (unpooled-by-the-app) access to the test database, e.g. for pg_stat_activity.</summary>
+    public string DatabaseConnectionString => _db.GetConnectionString();
+
     public async Task InitializeAsync()
     {
         await _db.StartAsync();
@@ -44,8 +48,12 @@ public class ApiFixture : IAsyncLifetime
         Host = await AlbaHost.For<Program>(builder =>
         {
             builder.UseSetting("ConnectionStrings:Todo", _db.GetConnectionString());
+            ConfigureHost(builder);
         });
     }
+
+    /// <summary>Hook for fixtures that need extra settings (e.g. tighter pool limits).</summary>
+    protected virtual void ConfigureHost(IWebHostBuilder builder) { }
 
     public async Task DisposeAsync()
     {
