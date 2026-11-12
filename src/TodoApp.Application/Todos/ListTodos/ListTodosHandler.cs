@@ -5,15 +5,21 @@ using TodoApp.Infrastructure.Persistence;
 
 namespace TodoApp.Application.Todos.ListTodos;
 
+/// <summary>
+/// Query handler: depends on <see cref="IQueryDbContextFactory"/> (not the DbContext) so Wolverine's
+/// AutoApplyTransactions does not open a transaction / hold a connection for a read.
+/// </summary>
 public static class ListTodosHandler
 {
-    public static async Task<IReadOnlyList<TodoDto>> Handle(ListTodosQuery query, TodoDbContext db, CancellationToken ct)
+    public static async Task<IReadOnlyList<TodoDto>> Handle(ListTodosQuery query, IQueryDbContextFactory dbFactory, CancellationToken ct)
     {
         TodoStatus? status = Enum.TryParse<TodoStatus>(query.Status, ignoreCase: true, out var parsed)
             ? parsed
             : null;
 
-        var q = db.Todos.AsNoTracking();
+        await using var db = dbFactory.CreateDbContext();
+
+        IQueryable<TodoItem> q = db.Todos;
         if (status is not null)
         {
             q = q.Where(x => x.Status == status);

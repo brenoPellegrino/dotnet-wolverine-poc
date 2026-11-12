@@ -51,7 +51,9 @@ builder.Host.UseWolverine(opts =>
 builder.Services.AddDbContextWithWolverineIntegration<TodoDbContext>(options =>
     options.UseNpgsql(connectionString));
 
-builder.Services.AddInfrastructure();
+// Also registers IQueryDbContextFactory: query handlers use it so they are NOT wrapped in a
+// transaction by AutoApplyTransactions (no connection held for reads).
+builder.Services.AddInfrastructure(connectionString);
 
 // Create Wolverine's message storage tables (and other stateful resources) on startup.
 builder.Services.AddResourceSetupOnStartup();

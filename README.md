@@ -139,6 +139,15 @@ POST /api/todos  (body = CreateTodoRequest)
   `SaveChanges`; o Wolverine salva e despacha as mensagens na **mesma transação**.
   `CompleteTodoHandler` publica `TodoCompleted`, persistido junto da mudança de status e
   despachado só após o commit (sem janela "salvou mas perdeu o evento").
+- **Queries sem transação (`IQueryDbContextFactory`)**: o `AutoApplyTransactions` envolve em
+  transação **todo** handler que recebe o `TodoDbContext` — inclusive leituras —, segurando uma
+  conexão do pool até o fim do handler. Somado a outro acesso ao banco na mesma request (ex.: um
+  middleware HTTP que carrega os escopos/permissões do usuário), cada request passa a precisar de
+  2 conexões e, sob carga, o pool esgota e as requests ficam esperando umas pelas outras
+  (*pool starvation*). Por isso: **commands** recebem `TodoDbContext` (transação + outbox);
+  **queries** (e middlewares de leitura) recebem `IQueryDbContextFactory`, criam um contexto
+  `NoTracking` com `await using` e devolvem a conexão ao pool logo após a consulta.
+  `TransactionPolicyTests` garante que as queries continuem não-transacionais.
 
 ## Autenticação OAuth (scaffolding pronto, desligado)
 
