@@ -10,13 +10,17 @@ public static class DependencyInjection
     /// registered by the API composition root with Wolverine's EF Core integration
     /// (AddDbContextWithWolverineIntegration), which enables the transactional outbox.
     /// </summary>
-    public static IServiceCollection AddInfrastructure(this IServiceCollection services, string connectionString)
+    public static IServiceCollection AddInfrastructure(this IServiceCollection services, DatabasePools pools)
     {
         services.AddSingleton(TimeProvider.System);
 
+        // Registered through a factory so the container disposes the pools on shutdown.
+        services.AddSingleton(_ => pools);
+
         // Read side: non-transactional DbContext factory for queries (see IQueryDbContextFactory).
+        // Same bounded pool as the command DbContext.
         services.AddSingleton<IQueryDbContextFactory>(
-            new QueryDbContextFactory(QueryDbContextFactory.BuildOptions(connectionString)));
+            new QueryDbContextFactory(QueryDbContextFactory.BuildOptions(pools.App)));
 
         return services;
     }

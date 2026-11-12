@@ -19,6 +19,13 @@ var builder = WebApplication.CreateBuilder(args);
 var connectionString = builder.Configuration.GetConnectionString("Todo")
     ?? "Host=localhost;Port=5432;Database=todo;Username=todo;Password=todo";
 
+// --- Connection pools: explicit ceilings instead of Npgsql's default of 100 per pool ---
+// App pool (EF Core: commands + queries) and Wolverine pool are separate and bounded, so one
+// instance never opens more than AppMaxSize + WolverineMaxSize connections. See DatabasePools.
+var poolOptions = builder.Configuration.GetSection(ConnectionPoolOptions.SectionName).Get<ConnectionPoolOptions>()
+    ?? new ConnectionPoolOptions();
+var pools = DatabasePools.Create(connectionString, poolOptions);
+
 // --- Wolverine (CQRS / messaging runtime) ---
 builder.Host.UseWolverine(opts =>
 {
@@ -26,7 +33,8 @@ builder.Host.UseWolverine(opts =>
     opts.Discovery.IncludeAssembly(typeof(AssemblyMarker).Assembly);
 
     // Durable transactional inbox/outbox stored in Postgres.
-    opts.PersistMessagesWithPostgresql(connectionString);
+    // Uses its own bounded pool so background agents never compete with HTTP requests.
+    opts.PersistMessagesWithPostgresql(pools.Wolverine);
 
     // Teach Wolverine about EF Core so it can resolve the DbContext in generated handler
     // code and wrap handlers in an EF transaction.
@@ -49,11 +57,11 @@ builder.Host.UseWolverine(opts =>
 // Register the DbContext with Wolverine's integration so handlers can take it without
 // triggering service location during code generation, and so the outbox can enlist it.
 builder.Services.AddDbContextWithWolverineIntegration<TodoDbContext>(options =>
-    options.UseNpgsql(connectionString));
+    options.UseNpgsql(pools.App));
 
-// Also registers IQueryDbContextFactory: query handlers use it so they are NOT wrapped in a
-// transaction by AutoApplyTransactions (no connection held for reads).
-builder.Services.AddInfrastructure(connectionString);
+// Also registers IQueryDbContextFactory (on the same app pool): query handlers use it so they
+// are NOT wrapped in a transaction by AutoApplyTransactions (no connection held for reads).
+builder.Services.AddInfrastructure(pools);
 
 // Create Wolverine's message storage tables (and other stateful resources) on startup.
 builder.Services.AddResourceSetupOnStartup();
@@ -76,6 +84,10 @@ builder.Services.AddTodoAuthentication(builder.Configuration);
 builder.Services.AddOpenApi();
 
 var app = builder.Build();
+
+app.Logger.LogInformation(
+    "Postgres connection budget per instance: {Total} (app pool {App} + Wolverine pool {Wolverine}), wait timeout {Timeout}s.",
+    poolOptions.TotalPerInstance, poolOptions.AppMaxSize, poolOptions.WolverineMaxSize, poolOptions.TimeoutSeconds);
 
 // Apply EF Core migrations on startup (fine for a POC; use a migration step in real deploys).
 using (var scope = app.Services.CreateScope())

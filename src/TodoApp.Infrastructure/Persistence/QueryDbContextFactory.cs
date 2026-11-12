@@ -1,3 +1,4 @@
+using System.Data.Common;
 using Microsoft.EntityFrameworkCore;
 
 namespace TodoApp.Infrastructure.Persistence;
@@ -10,9 +11,9 @@ public sealed class QueryDbContextFactory(DbContextOptions<TodoDbContext> option
 {
     public TodoDbContext CreateDbContext() => new(options);
 
-    public static DbContextOptions<TodoDbContext> BuildOptions(string connectionString)
+    public static DbContextOptions<TodoDbContext> BuildOptions(DbDataSource dataSource)
         => new DbContextOptionsBuilder<TodoDbContext>()
-            .UseNpgsql(connectionString)
+            .UseNpgsql(dataSource)
             // Read side: no change tracking, so AsNoTracking() is the default.
             .UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking)
             .Options;
