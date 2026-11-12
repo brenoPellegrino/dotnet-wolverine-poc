@@ -89,7 +89,8 @@ app.UseExceptionHandler();
 app.UseTodoAuthentication();
 
 app.MapOpenApi();
-app.MapScalarApiReference();
+app.MapScalarApiReference();                                  // UI em /scalar
+app.UseSwaggerUI(o => o.SwaggerEndpoint("/openapi/v1.json", "TodoApp API v1")); // UI em /swagger
 
 app.MapWolverineEndpoints(opts =>
 {
